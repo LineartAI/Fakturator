@@ -104,8 +104,10 @@ web/…). Složky data/ a pdf-faktury/ s vašimi fakturami, odběrateli
 a nastavením se nikdy nepřepisují, stejně jako runtime/.
 Pokud stažení selže, program zůstane v původní verzi.
 
-Adresa, odkud se aktualizace stahují, je v server.js (AKTUALIZACE_URL).
-Lze ji přepsat v data/nastaveni.json klíčem "aktualizaceUrl".
+Adresy, odkud se aktualizace stahují, jsou v server.js (AKTUALIZACE_ZDROJE):
+nejdřív firemní repozitář LineartAI/Fakturator, záložně původní
+AIWarlord/OpenFaktura_Nova. Vlastní adresu lze předřadit v data/nastaveni.json
+klíčem "aktualizaceUrl".
 
 Pro vývojáře: při vydání nové verze zvyšte číslo ve verze.json, doplňte
 datum a popis a nahrajte změny na git. Datové soubory v data/ smí získat

@@ -25,11 +25,17 @@ const DRAFT      = path.join(DATA_DIR, 'rozpracovana.json');
 
 /* ---- verze a aktualizace ----
    verze.json v kořeni programu nese číslo verze a seznam programových souborů.
-   Aktualizace stáhne z adresy AKTUALIZACE_URL (lze přepsat v data/nastaveni.json
-   klíčem "aktualizaceUrl") nový verze.json a soubory v něm uvedené. Složky
-   data/, pdf-faktury/ a runtime/ se NIKDY nepřepisují — uživatelská data zůstávají. */
+   Aktualizace stáhne z první dostupné adresy v AKTUALIZACE_ZDROJE (lze předřadit vlastní
+   adresu v data/nastaveni.json klíčem "aktualizaceUrl") nový verze.json a soubory v něm
+   uvedené. Složky data/, pdf-faktury/ a runtime/ se NIKDY nepřepisují — uživatelská data zůstávají.
+   Zdroje se zkoušejí v pořadí: firemní repozitář LineartAI/Fakturator, záložně původní
+   AIWarlord/OpenFaktura_Nova (kvůli instalacím a přesměrování při přesunu repozitáře). */
 const VERZE_FILE = path.join(ROOT, 'verze.json');
-const AKTUALIZACE_URL = 'https://raw.githubusercontent.com/AIWarlord/OpenFaktura_Nova/main/';
+const AKTUALIZACE_ZDROJE = [
+  'https://raw.githubusercontent.com/LineartAI/Fakturator/main/',
+  'https://raw.githubusercontent.com/AIWarlord/OpenFaktura_Nova/main/'
+];
+const AKTUALIZACE_URL = AKTUALIZACE_ZDROJE[0];
 const CHRANENE = ['data', 'pdf-faktury', 'runtime', 'OpenFaktura.bat', 'OpenFaktura.command', '.git', 'verze.json'];
 const RESTART_KOD = 75;   /* spouštěč (.bat / .command) při tomto kódu server znovu spustí */
 
@@ -110,11 +116,24 @@ async function stahni(url){
   if(!r.ok) throw new Error('Stažení selhalo (' + r.status + '): ' + url);
   return Buffer.from(await r.arrayBuffer());
 }
-async function zdrojAktualizace(){
+async function seznamZdroju(){
   const nast = await readJson(NASTAVENI, DEFAULT_NASTAVENI);
-  let u = (nast && typeof nast.aktualizaceUrl === 'string' && nast.aktualizaceUrl.trim()) || AKTUALIZACE_URL;
-  if(!u.endsWith('/')) u += '/';
-  return await pripniCommit(u);
+  const vlastni = nast && typeof nast.aktualizaceUrl === 'string' && nast.aktualizaceUrl.trim();
+  const vse = (vlastni ? [vlastni] : []).concat(AKTUALIZACE_ZDROJE);
+  return [...new Set(vse.map(u => u.endsWith('/') ? u : u + '/'))];
+}
+/* vrátí první zdroj, ze kterého se podaří stáhnout verze.json (spolu s jeho obsahem) */
+async function zdrojAktualizace(){
+  const chyby = [];
+  for(const zaklad of await seznamZdroju()){
+    const u = await pripniCommit(zaklad);
+    try {
+      const remote = JSON.parse((await stahni(u + 'verze.json?t=' + Date.now())).toString('utf8'));
+      if(remote && typeof remote.verze === 'string') return { zdroj: u, remote };
+      chyby.push(zaklad + ': neplatný verze.json');
+    } catch(e){ chyby.push(zaklad + ': ' + (e && e.message || e)); }
+  }
+  throw new Error(chyby.join(' | '));
 }
 /* raw.githubusercontent.com drží soubory ve své cache až 5 minut po nahrání a parametr ?t= v adrese
    nepomáhá — hned po vydání by se tak nabízela ještě stará verze. Proto se u GitHubu nejdřív přes API
@@ -135,12 +154,10 @@ async function pripniCommit(u){
   } catch(e){ return u; }
 }
 async function zkontrolujAktualizaci(){
-  const zdroj = await zdrojAktualizace();
   const local = readVerze();
-  let remote;
-  try { remote = JSON.parse((await stahni(zdroj + 'verze.json?t=' + Date.now())).toString('utf8')); }
+  let zdroj, remote;
+  try { ({ zdroj, remote } = await zdrojAktualizace()); }
   catch(e){ throw new Error('Nepodařilo se zjistit dostupnou verzi (' + (e && e.message || e) + ').'); }
-  if(!remote || typeof remote.verze !== 'string') throw new Error('Vzdálený verze.json má neplatný formát.');
   return {
     aktualni: local.verze, dostupna: remote.verze, datum: remote.datum || '', popis: remote.popis || '',
     novejsi: cmpVerze(remote.verze, local.verze) > 0, zdroj, _remote: remote

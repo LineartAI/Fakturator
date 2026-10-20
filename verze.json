@@ -1,7 +1,7 @@
 {
-  "verze": "1.7.0",
-  "datum": "2026-10-09",
-  "popis": "Celková částka se zaokrouhluje na celé koruny, rozdíl je na faktuře vykázán jako řádek Zaokrouhlení (volba v Nastavení → Dodavatel, výchozí zapnuto).",
+  "verze": "1.7.1",
+  "datum": "2026-10-20",
+  "popis": "Aktualizace se nově stahují z firemního repozitáře LineartAI/Fakturator, původní adresa zůstává jako záložní.",
   "soubory": [
     "server.js",
     "web/index.html",
