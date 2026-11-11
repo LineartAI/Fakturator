@@ -95,8 +95,9 @@ jobs:
           test -f "$FAKTURATOR_DATA/data/nastaveni.json" && test -f "$FAKTURATOR_DATA/pdf-faktury/Faktura 1.pdf"
           # start, odpoved, data na spravnem miste
           [ "$("$S" start $$)" = "spusteno" ]
-          curl -fsS http://localhost:3310/api/verze | tee /dev/stderr | grep -q "$VERZE"
-          curl -fsS http://localhost:3310/ | grep -qi fakturator
+          # odpovedi do promenne: grep -q v rource by curl ukoncil predcasne (pipefail -> chyba 23)
+          ODP=$(curl -fsS http://localhost:3310/api/verze); echo "$ODP"; grep -q "$VERZE" <<< "$ODP"
+          STR=$(curl -fsS http://localhost:3310/); grep -qi fakturator <<< "$STR"
           grep -q "$FAKTURATOR_DATA/data" "$FAKTURATOR_PROG/fakturator.log"
           test -f "$FAKTURATOR_PROG/server.js"
           [ "$("$S" bezi)" = "ano" ]
