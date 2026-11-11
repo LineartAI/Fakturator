@@ -15,9 +15,12 @@ const vm   = require('vm');
 
 const ROOT     = __dirname;
 const WEB_DIR  = path.join(ROOT, 'web');
-const DATA_DIR = path.join(ROOT, 'data');
+/* Data a PDF jsou ve složce programu (zip verze), nebo ve složce z proměnné OF_DATA_ROOT
+   (nainstalovaná aplikace: program je ve skryté systémové složce, data v Dokumenty/Fakturator). */
+const DATA_ROOT = process.env.OF_DATA_ROOT ? path.resolve(process.env.OF_DATA_ROOT) : ROOT;
+const DATA_DIR = path.join(DATA_ROOT, 'data');
 const FAK_DIR  = path.join(DATA_DIR, 'faktury');
-const PDF_DIR  = path.join(ROOT, 'pdf-faktury');
+const PDF_DIR  = path.join(DATA_ROOT, 'pdf-faktury');
 
 const NASTAVENI = path.join(DATA_DIR, 'nastaveni.json');
 const ODBERATELE = path.join(DATA_DIR, 'odberatele.json');

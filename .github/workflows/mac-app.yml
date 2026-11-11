@@ -1,0 +1,165 @@
+# Sestavi Fakturator.app pro macOS (bez podpisu u Applu, jen ad-hoc) a obraz disku Fakturator-mac.dmg a na skutecnem
+# macOS ho vyzkousi: spoustec, prevod dat, start a ukonceni serveru, hlidani aplikace, spusteni a ukonceni aplikace.
+# Runtime Node.js se bere z vydaneho baliku Fakturator-mac.zip (stejne binarky, jake uz uzivatele pouzivaji).
+#   push do vetve mac-app  -> sestavit, otestovat, dmg jako artefakt a jako zkusebni vydani "mac-test" (predbezne, ne "latest")
+#   rucni spusteni         -> totez; s nahrat_do = tag vydani (napr. v1.8.0) se dmg prida k tomuto vydani
+name: Aplikace pro macOS
+on:
+  push:
+    branches: [mac-app]
+  workflow_dispatch:
+    inputs:
+      nahrat_do:
+        description: "Tag vydani, ke kteremu se ma dmg pridat (prazdne = jen zkusebni vydani mac-test)"
+        required: false
+        default: ""
+permissions:
+  contents: write
+jobs:
+  sestavit:
+    runs-on: macos-14
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runtime Node.js z posledniho vydani
+        run: |
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern Fakturator-mac.zip --dir stazeno
+          unzip -q stazeno/Fakturator-mac.zip -d stazeno
+          ls -la stazeno/OpenFaktura/runtime/*/
+          file stazeno/OpenFaktura/runtime/mac-arm64/node stazeno/OpenFaktura/runtime/mac-x64/node
+          stazeno/OpenFaktura/runtime/mac-arm64/node --version
+
+      - name: Ikona (icns)
+        run: |
+          mkdir Fakturator.iconset
+          for s in 16 32 128 256 512; do
+            sips -z $s $s nastroje/mac/ikona.png --out Fakturator.iconset/icon_${s}x${s}.png >/dev/null
+            sips -z $((s*2)) $((s*2)) nastroje/mac/ikona.png --out Fakturator.iconset/icon_${s}x${s}@2x.png >/dev/null
+          done
+          iconutil -c icns Fakturator.iconset -o Fakturator.icns
+          ls -la Fakturator.icns
+
+      - name: Sestavit Fakturator.app
+        run: |
+          set -euo pipefail
+          VERZE=$(sed -n 's/.*"verze"[^"]*"\([0-9.]*\)".*/\1/p' verze.json | head -1)
+          echo "VERZE=$VERZE" >> "$GITHUB_ENV"
+          mkdir obraz
+          APP=obraz/Fakturator.app
+          osacompile -s -o "$APP" nastroje/mac/Fakturator.applescript
+          R="$APP/Contents/Resources"
+          # program (vychozi kopie; pri prvnim spusteni se kopiruje do Application Support a dal se aktualizuje sam)
+          mkdir -p "$R/program/web/lib" "$R/runtime"
+          cp server.js verze.json CTI-MNE.txt "$R/program/"
+          cp web/index.html "$R/program/web/"
+          cp web/lib/pdfmake.js web/lib/qrcode.js "$R/program/web/lib/"
+          cp -R stazeno/OpenFaktura/runtime/mac-arm64 stazeno/OpenFaktura/runtime/mac-x64 "$R/runtime/"
+          chmod +x "$R/runtime/mac-arm64/node" "$R/runtime/mac-x64/node"
+          cp nastroje/mac/spust.sh "$R/spust.sh"; chmod +x "$R/spust.sh"
+          # ikona a udaje aplikace
+          cp Fakturator.icns "$R/applet.icns"
+          rm -f "$R/Assets.car"
+          PL="$APP/Contents/Info.plist"
+          pb() { /usr/libexec/PlistBuddy -c "$1" "$PL"; }
+          pb "Delete :CFBundleIconName" 2>/dev/null || true
+          pb "Set :CFBundleName Fakturator"
+          pb "Add :CFBundleDisplayName string Fakturator" 2>/dev/null || pb "Set :CFBundleDisplayName Fakturator"
+          pb "Add :CFBundleIdentifier string cz.lineart.fakturator" 2>/dev/null || pb "Set :CFBundleIdentifier cz.lineart.fakturator"
+          pb "Add :CFBundleShortVersionString string $VERZE" 2>/dev/null || pb "Set :CFBundleShortVersionString $VERZE"
+          pb "Add :CFBundleVersion string $VERZE" 2>/dev/null || pb "Set :CFBundleVersion $VERZE"
+          pb "Add :LSMinimumSystemVersion string 11.0" 2>/dev/null || pb "Set :LSMinimumSystemVersion 11.0"
+          plutil -replace NSHumanReadableCopyright -string "Lineart" "$PL"
+          plutil -replace NSDocumentsFolderUsageDescription -string "Fakturator ukládá faktury, nastavení a PDF do složky Dokumenty/Fakturator." "$PL"
+          plutil -lint "$PL"
+          # po uprave obsahu znovu podepsat (ad-hoc): na Apple Silicon se aplikace s neplatnym podpisem vubec nespusti
+          xattr -cr "$APP"
+          codesign --force -s - "$APP"
+          codesign --verify --strict --verbose=2 "$APP"
+          /usr/libexec/PlistBuddy -c "Print" "$PL" | head -40
+          du -sh "$APP"
+
+      - name: Test spoustece (prevod dat, start, stop, hlidani aplikace)
+        run: |
+          set -euo pipefail
+          S="$PWD/obraz/Fakturator.app/Contents/Resources/spust.sh"
+          export FAKTURATOR_PROG="$RUNNER_TEMP/prog" FAKTURATOR_DATA="$RUNNER_TEMP/dok" OF_NO_OPEN=1 PORT=3310
+          [ "$("$S" stav)" = "novy" ]
+          mkdir -p "$RUNNER_TEMP/stara/data/faktury" "$RUNNER_TEMP/stara/pdf-faktury"
+          echo '{"dodavatel":{"name":"Test"}}' > "$RUNNER_TEMP/stara/data/nastaveni.json"; echo pdf > "$RUNNER_TEMP/stara/pdf-faktury/Faktura 1.pdf"
+          if "$S" prevest "$RUNNER_TEMP" 2>/dev/null; then echo "prevod ze spatne slozky mel selhat"; exit 1; fi
+          [ "$("$S" prevest "$RUNNER_TEMP/stara/")" = "prevedeno" ]
+          [ "$("$S" stav)" = "hotovo" ]
+          test -f "$FAKTURATOR_DATA/data/nastaveni.json" && test -f "$FAKTURATOR_DATA/pdf-faktury/Faktura 1.pdf"
+          # start, odpoved, data na spravnem miste
+          [ "$("$S" start $$)" = "spusteno" ]
+          curl -fsS http://localhost:3310/api/verze | tee /dev/stderr | grep -q "$VERZE"
+          curl -fsS http://localhost:3310/ | grep -qi fakturator
+          grep -q "$FAKTURATOR_DATA/data" "$FAKTURATOR_PROG/fakturator.log"
+          test -f "$FAKTURATOR_PROG/server.js"
+          [ "$("$S" bezi)" = "ano" ]
+          [ "$("$S" start $$)" = "bezi" ]
+          "$S" stop; sleep 3
+          [ "$("$S" bezi)" = "ne" ]
+          if curl -fsS -m 3 http://localhost:3310/api/verze >/dev/null 2>&1; then echo "server po stop stale bezi"; exit 1; fi
+          # hlidani aplikace: kdyz proces aplikace skonci (i nasilne), server se ukonci sam
+          sleep 8 & HLIDANY=$!
+          [ "$("$S" start $HLIDANY)" = "spusteno" ]
+          curl -fsS http://localhost:3310/api/verze >/dev/null
+          wait $HLIDANY; sleep 6
+          if curl -fsS -m 3 http://localhost:3310/api/verze >/dev/null 2>&1; then echo "server po skonceni aplikace stale bezi"; exit 1; fi
+          [ "$("$S" bezi)" = "ne" ]
+          # nova aplikace s novejsi verzi programu prepise nainstalovanou kopii, starsi ne
+          sed -i '' 's/"verze"[^,]*/"verze": "0.0.1"/' "$FAKTURATOR_PROG/verze.json"
+          [ "$("$S" start $$)" = "spusteno" ]; "$S" stop; sleep 2
+          grep -q "$VERZE" "$FAKTURATOR_PROG/verze.json"
+          echo "TEST SPOUSTECE OK"
+
+      - name: Test aplikace (spusteni z Finderu, ukonceni)
+        run: |
+          set -uo pipefail
+          # slozka s daty uz existuje -> aplikace se nepta na prevod (dialog by v testu nikdo nepotvrdil)
+          mkdir -p "$HOME/Documents/Fakturator/data"
+          open obraz/Fakturator.app
+          OK=0
+          for i in $(seq 1 40); do if curl -fsS -m 2 http://localhost:3000/api/verze >/dev/null 2>&1; then OK=1; break; fi; sleep 1; done
+          cat "$HOME/Library/Application Support/Fakturator/fakturator.log" || true
+          if [ "$OK" != 1 ]; then echo "aplikace server nespustila"; ps aux | grep -i -E "applet|Fakturator|node" | grep -v grep; exit 1; fi
+          echo "aplikace bezi, server odpovida"
+          pgrep -lf "Fakturator.app" || true
+          # ukonceni jako z Docku (udalost Quit); kdyby ji test nesmel poslat, overi se aspon hlidani po nasilnem ukonceni
+          osascript -e 'tell application id "cz.lineart.fakturator" to quit' & OSA=$!
+          ( sleep 15; kill $OSA 2>/dev/null ) & 
+          if wait $OSA; then echo "Quit poslan"; else echo "Quit nejde poslat, ukoncuji proces"; pkill -f "Fakturator.app/Contents/MacOS" || true; fi
+          for i in $(seq 1 15); do if ! curl -fsS -m 2 http://localhost:3000/api/verze >/dev/null 2>&1; then echo "server po ukonceni aplikace skoncil (za ${i} s)"; exit 0; fi; sleep 1; done
+          echo "server po ukonceni aplikace stale bezi"; exit 1
+
+      - name: Obraz disku (dmg)
+        run: |
+          set -euo pipefail
+          ln -s /Applications obraz/Applications
+          hdiutil create -volname "Fakturator" -srcfolder obraz -ov -format UDZO Fakturator-mac.dmg
+          hdiutil verify Fakturator-mac.dmg
+          ls -la Fakturator-mac.dmg
+          spctl -a -vv obraz/Fakturator.app || echo "(Gatekeeper aplikaci bez podpisu Apple odmita - ocekavane, uzivatel ji povoli jednou rucne)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fakturator-mac-dmg
+          path: Fakturator-mac.dmg
+
+      - name: Zkusebni vydani mac-test
+        run: |
+          set -euo pipefail
+          POZN="Zkušební sestavení aplikace pro macOS (verze programu $VERZE, commit ${GITHUB_SHA:0:7}). Není určeno uživatelům."
+          if gh release view mac-test --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload mac-test Fakturator-mac.dmg --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit mac-test --notes "$POZN" --prerelease --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create mac-test Fakturator-mac.dmg --prerelease --latest=false --target "$GITHUB_SHA" --title "Fakturator pro macOS (zkušební)" --notes "$POZN" --repo "$GITHUB_REPOSITORY"
+          fi
+
+      - name: Pridat dmg k vydani
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.nahrat_do != '' }}
+        run: gh release upload "${{ inputs.nahrat_do }}" Fakturator-mac.dmg --clobber --repo "$GITHUB_REPOSITORY"
