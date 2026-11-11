@@ -17,7 +17,7 @@ permissions:
   contents: write
 jobs:
   sestavit:
-    runs-on: macos-14
+    runs-on: macos-latest
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
