@@ -1,0 +1,129 @@
+# Sestavi instalator Fakturatoru pro Windows (Fakturator-instalace.exe) a na skutecnych Windows ho vyzkousi:
+# spoustec (prevod dat, start, ukonceni, hlidani serveru), tichou instalaci, zastupce, preinstalaci pres bezici aplikaci, odinstalaci.
+# Runtime Node.js se bere z vydaneho baliku Fakturator-windows.zip (stejna binarka, jakou uz uzivatele pouzivaji).
+#   push do vetve win-app  -> sestavit, otestovat, instalator jako artefakt a jako zkusebni vydani "win-test" (predbezne, ne "latest")
+#   rucni spusteni         -> totez; s nahrat_do = tag vydani (napr. v1.8.0) se instalator prida k tomuto vydani
+name: Instalator pro Windows
+on:
+  push:
+    branches: [win-app]
+  workflow_dispatch:
+    inputs:
+      nahrat_do:
+        description: "Tag vydani, ke kteremu se ma instalator pridat (prazdne = jen zkusebni vydani win-test)"
+        required: false
+        default: ""
+permissions:
+  contents: write
+jobs:
+  sestavit:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runtime Node.js z posledniho vydani
+        run: |
+          gh release download --repo $env:GITHUB_REPOSITORY --pattern Fakturator-windows.zip --dir stazeno
+          Expand-Archive stazeno\Fakturator-windows.zip -DestinationPath stazeno
+          & stazeno\OpenFaktura\runtime\win\node.exe --version
+
+      - name: Sestavit aplikaci (Fakturator.exe + program + runtime)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $verze = (Get-Content verze.json -Raw | ConvertFrom-Json).verze
+          "VERZE=$verze" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force stavba\program\web\lib, stavba\runtime\win, vystup | Out-Null
+          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          Push-Location nastroje\win
+          & $csc /nologo /target:winexe /codepage:65001 /win32icon:Fakturator.ico /resource:Fakturator.ico,Fakturator.ico /r:System.Windows.Forms.dll /r:System.Drawing.dll "/out:..\..\stavba\Fakturator.exe" Fakturator.cs
+          if ($LASTEXITCODE -ne 0) { throw "preklad Fakturator.exe selhal" }
+          Pop-Location
+          Copy-Item server.js, verze.json, CTI-MNE.txt stavba\program\
+          Copy-Item web\index.html stavba\program\web\
+          Copy-Item web\lib\pdfmake.js, web\lib\qrcode.js stavba\program\web\lib\
+          Copy-Item stazeno\OpenFaktura\runtime\win\node.exe stavba\runtime\win\
+          Get-ChildItem stavba -Recurse -File | ForEach-Object { '{0,10}  {1}' -f $_.Length, $_.FullName.Substring((Resolve-Path stavba).Path.Length + 1) }
+
+      - name: Zkouska spoustece
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File nastroje\win\zkouska.ps1 -Exe "$PWD\stavba\Fakturator.exe" -T "$env:RUNNER_TEMP\zk1"
+          if ($LASTEXITCODE -ne 0) { throw "zkouska spoustece selhala" }
+          $p = Start-Process "$PWD\stavba\Fakturator.exe" -ArgumentList '--nahled', "$PWD\vystup\uvodni-okno.png" -PassThru -Wait
+          if ($p.ExitCode -ne 0 -or -not (Test-Path vystup\uvodni-okno.png)) { throw "nahled uvodniho okna selhal" }
+
+      - name: Instalator (Inno Setup)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; if ($LASTEXITCODE -ne 0) { throw "instalace Inno Setup selhala" } }
+          & $iscc /Qp "/DVerze=$env:VERZE" "/DStavba=$PWD\stavba" "/O$PWD\vystup" nastroje\win\Fakturator.iss
+          if ($LASTEXITCODE -ne 0) { throw "sestaveni instalatoru selhalo" }
+          Get-Item vystup\Fakturator-instalace.exe | Select-Object Name, Length
+
+      - name: Zkouska instalace, preinstalace a odinstalace
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = "$env:LOCALAPPDATA\Programs\Fakturator"; $exe = "$app\Fakturator.exe"
+          $plocha = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Fakturator.lnk'
+          $start = Join-Path ([Environment]::GetFolderPath('Programs')) 'Fakturator.lnk'
+          $dok = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Fakturator'
+          function Ok([string]$co, [bool]$v) { if ($v) { "OK    $co" } else { throw "CHYBA $co" } }
+          function Cekej([scriptblock]$p, [int]$s = 30) { for ($i = 0; $i -lt $s * 4; $i++) { if (& $p) { return $true }; Start-Sleep -Milliseconds 250 }; return $false }
+          function Bezi { try { (Invoke-WebRequest 'http://localhost:3330/api/verze' -UseBasicParsing -TimeoutSec 3).Content } catch { '' } }
+          function Instaluj { $p = Start-Process "$PWD\vystup\Fakturator-instalace.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$env:RUNNER_TEMP\instalace.log" -PassThru -Wait; return $p.ExitCode }
+
+          Ok 'ticha instalace' ((Instaluj) -eq 0)
+          Ok 'soubory aplikace' ((Test-Path $exe) -and (Test-Path "$app\runtime\win\node.exe") -and (Test-Path "$app\program\server.js"))
+          Ok 'zastupce na plose' (Test-Path $plocha)
+          Ok 'zastupce v nabidce Start' (Test-Path $start)
+          $cil = (New-Object -ComObject WScript.Shell).CreateShortcut($plocha).TargetPath
+          Ok "zastupce vede na aplikaci ($cil)" ($cil -eq $exe)
+
+          # nainstalovana aplikace ve vlastnich zkusebnich slozkach
+          powershell -NoProfile -ExecutionPolicy Bypass -File nastroje\win\zkouska.ps1 -Exe $exe -T "$env:RUNNER_TEMP\zk2" -Port 3325
+          Ok 'zkouska nainstalovane aplikace' ($LASTEXITCODE -eq 0)
+
+          # skutecne umisteni (Dokumenty\Fakturator, %LOCALAPPDATA%\Fakturator) a preinstalace pres bezici aplikaci
+          $env:FAKTURATOR_TICHO = '1'; $env:PORT = '3330'
+          $a = Start-Process $exe -PassThru
+          Ok 'aplikace bezi z vychozich slozek' (Cekej { (Bezi) -ne '' })
+          Ok 'data v Dokumentech' (Test-Path "$dok\data")
+          Ok 'pracovni kopie programu' (Test-Path "$env:LOCALAPPDATA\Fakturator\program\server.js")
+          'zkouska' | Set-Content "$dok\data\moje.txt"
+          Ok 'preinstalace pres bezici aplikaci' ((Instaluj) -eq 0)
+          Ok 'instalator bezici aplikaci ukoncil' ((Cekej { $a.HasExited } 15) -and (Bezi) -eq '')
+
+          $p = Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru -Wait
+          Ok 'odinstalace odstranila aplikaci' (Cekej { -not (Test-Path $exe) } 60)
+          Ok 'odinstalace odstranila zastupce' ((Cekej { -not (Test-Path $plocha) } 10) -and -not (Test-Path $start))
+          Ok 'odinstalace odstranila pracovni kopii programu' (Cekej { -not (Test-Path "$env:LOCALAPPDATA\Fakturator") } 10)
+          Ok 'data uzivatele po odinstalaci zustala' (Test-Path "$dok\data\moje.txt")
+          'ZKOUSKA INSTALACE OK'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fakturator-instalace
+          path: |
+            vystup/Fakturator-instalace.exe
+            vystup/uvodni-okno.png
+
+      - name: Zkusebni vydani win-test
+        run: |
+          $pozn = "Zkušební sestavení instalátoru pro Windows (verze programu $env:VERZE, commit $($env:GITHUB_SHA.Substring(0,7))). Není určeno uživatelům."
+          gh release view win-test --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload win-test vystup\Fakturator-instalace.exe --clobber --repo $env:GITHUB_REPOSITORY
+            gh release edit win-test --notes $pozn --prerelease --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create win-test vystup\Fakturator-instalace.exe --prerelease --latest=false --target $env:GITHUB_SHA --title "Fakturator pro Windows (zkušební)" --notes $pozn --repo $env:GITHUB_REPOSITORY
+          }
+          if ($LASTEXITCODE -ne 0) { throw "vydani win-test selhalo" }
+
+      - name: Pridat instalator k vydani
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.nahrat_do != '' }}
+        run: gh release upload "${{ inputs.nahrat_do }}" vystup\Fakturator-instalace.exe --clobber --repo $env:GITHUB_REPOSITORY
