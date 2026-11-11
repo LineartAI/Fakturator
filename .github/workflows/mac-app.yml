@@ -29,6 +29,7 @@ jobs:
           unzip -q stazeno/Fakturator-mac.zip -d stazeno
           ls -la stazeno/OpenFaktura/runtime/*/
           file stazeno/OpenFaktura/runtime/mac-arm64/node stazeno/OpenFaktura/runtime/mac-x64/node
+          chmod +x stazeno/OpenFaktura/runtime/mac-arm64/node stazeno/OpenFaktura/runtime/mac-x64/node   # v zipu nejsou spustitelne
           stazeno/OpenFaktura/runtime/mac-arm64/node --version
 
       - name: Ikona (icns)
