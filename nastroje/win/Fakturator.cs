@@ -181,17 +181,17 @@ class Uvod : Form
     public Uvod(Icon ikona)
     {
         Text = "Fakturator"; Icon = ikona; FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false;
-        StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10f); ClientSize = new Size(520, 300); ShowInTaskbar = true;
+        StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10f); ClientSize = new Size(520, 318); ShowInTaskbar = true;
         Label nadpis = new Label { Text = "Vítej ve Fakturatoru", Font = new Font("Segoe UI", 15f, FontStyle.Bold), Location = new Point(24, 20), AutoSize = true };
         Label text = new Label
         {
-            Location = new Point(24, 64), Size = new Size(472, 170),
+            Location = new Point(24, 64), Size = new Size(472, 188),
             Text = "Faktury a nastavení se ukládají do složky Dokumenty → Fakturator, hotová PDF do její podsložky pdf-faktury.\r\n\r\n" +
-                   "Fakturator běží na pozadí a otevírá se v prohlížeči. Jeho ikonu najdeš vpravo dole u hodin, přes ni ho také ukončíš.\r\n\r\n" +
+                   "Fakturator běží na pozadí a otevírá se v prohlížeči. Jeho ikonu najdeš vpravo dole u hodin (někdy je schovaná pod šipkou ^), přes ni ho také ukončíš.\r\n\r\n" +
                    "Používal(a) jsi Fakturator už dřív ze složky OpenFaktura? Můžu z ní převést tvoje faktury a nastavení."
         };
-        Button nacisto = new Button { Text = "Začít načisto", Size = new Size(150, 36), Location = new Point(188, 244) };
-        Button prevest = new Button { Text = "Převést data", Size = new Size(150, 36), Location = new Point(346, 244) };
+        Button nacisto = new Button { Text = "Začít načisto", Size = new Size(150, 36), Location = new Point(188, 262) };
+        Button prevest = new Button { Text = "Převést data", Size = new Size(150, 36), Location = new Point(346, 262) };
         nacisto.Click += delegate { Prevest = false; DialogResult = DialogResult.OK; };
         prevest.Click += delegate { Prevest = true; DialogResult = DialogResult.OK; };
         Controls.Add(nadpis); Controls.Add(text); Controls.Add(nacisto); Controls.Add(prevest);
@@ -302,7 +302,7 @@ class Aplikace : ApplicationContext
         if (!otevreno)
         {
             otevreno = true;
-            ikona.ShowBalloonTip(6000, "Fakturator běží", "Otevřel se v prohlížeči. Ikonu najdeš tady u hodin, přes ni ho také ukončíš.", ToolTipIcon.Info);
+            ikona.ShowBalloonTip(6000, "Fakturator běží", "Otevřel se v prohlížeči. Ikonu najdeš tady u hodin (někdy pod šipkou ^), přes ni ho také ukončíš.", ToolTipIcon.Info);
         }
     }
 

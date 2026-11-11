@@ -21,7 +21,8 @@ AppPublisherURL=https://github.com/LineartAI/Fakturator
 DefaultDirName={localappdata}\Programs\Fakturator
 DisableDirPage=yes
 DisableProgramGroupPage=yes
-DisableReadyPage=yes
+; stranka "Instalace je pripravena" zustava, aby mel pruvodce vzdy stejne kroky: Instalovat -> Dokoncit (videonavod na portalu)
+DisableReadyPage=no
 PrivilegesRequired=lowest
 CloseApplications=no
 OutputBaseFilename=Fakturator-instalace
