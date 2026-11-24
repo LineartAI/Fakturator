@@ -56,6 +56,8 @@ const DEFAULT_NASTAVENI = {
   hubCastka: 0,          /* výše pronájmu v Kč za měsíc */
   hubOdberatel: '',      /* název odběratele, kterému se pronájem přičítá (Line Art) */
   hubNazev: 'Pronájem HUB',   /* text řádku na faktuře */
+  hubZakazka: '',        /* druh zakázky pro zapsání HUBu: ACC / KREA / DTP (seznam HUB_ZAKAZKY ve web/index.html) */
+  hubRok: null,          /* účetní rok LineArtu (říjen–září, označený rokem konce), pro který je výše HUBu potvrzená */
   lastInvoiceNumber: null
 };
 

@@ -129,6 +129,9 @@ input,select,textarea{font:inherit;color:var(--ink)}
 .item .qty,.item .price{font-variant-numeric:tabular-nums;text-align:right}
 .item .lbl{font-size:.8rem}
 .item.hub{border-color:var(--accent);background:#F4F6FF}
+.hubrok{border:1px solid var(--warn);border-left-width:4px;background:#FFF6F4;border-radius:6px;padding:10px 12px;margin:10px 0 0;font-size:.85rem}
+.hubrok p{margin:0 0 8px}.hubrok .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hubrok input{width:120px;padding:4px 6px;border:1px solid var(--line);border-radius:4px}
 .item .meta{grid-column:1 / -1;display:flex;justify-content:space-between;align-items:center;font-size:.68rem;color:var(--ink-soft);padding:0 4px}
 .item .meta .mj{display:inline-flex;align-items:center;gap:4px}
 .item .meta .unit{width:58px;padding:1px 4px;font-size:.68rem;border:1px solid var(--line);background:#fff;border-radius:4px;color:var(--ink)}
@@ -297,6 +300,13 @@ input,select,textarea{font:inherit;color:var(--ink)}
       </div>
       <div class="f full chk-holder" id="invHubField" style="display:none">
         <label class="chk"><input type="checkbox" id="invHub"> Pronájem HUB na této faktuře</label>
+        <div class="hubrok" id="invHubRok" hidden>
+          <p id="invHubRokText"></p>
+          <div class="row">
+            <label for="invHubRokCastka">Výše HUBu (Kč / měsíc)</label><input id="invHubRokCastka" type="number" min="0" step="1" inputmode="decimal">
+            <button class="btn" id="invHubRokOk" type="button">Potvrdit pro nový účetní rok</button>
+          </div>
+        </div>
       </div>
       <div class="btnbar">
         <button class="btn" id="btnNew">Nová faktura (další číslo)</button>
@@ -413,10 +423,12 @@ input,select,textarea{font:inherit;color:var(--ink)}
           <label class="chk"><input type="checkbox" id="hubOn"> Platím si pronájem – HUB</label>
         </div>
         <div class="f" id="hubCastkaField" style="display:none"><label for="hubCastka">Výše pronájmu (Kč / měsíc)</label><input id="hubCastka" type="number" min="0" step="1" placeholder="0" inputmode="decimal"></div>
+        <div class="f full" id="hubZakazkaField" style="display:none"><label for="hubZakazka">Zakázka pro zapsání HUBu</label><select id="hubZakazka"></select></div>
         <div class="f" id="hubOdberatelField" style="display:none"><label for="hubOdberatel">Fakturovat odběrateli</label><select id="hubOdberatel"></select></div>
         <div class="f full" id="hubNazevField" style="display:none"><label for="hubNazev">Text řádku na faktuře</label><input id="hubNazev" type="text" placeholder="Pronájem HUB"></div>
       </div>
       <p class="hint">Pronájem se každý měsíc <b>přičte</b> jako řádek na první fakturu vybranému odběrateli (podle data vystavení). Další faktura v témže měsíci, třeba za mimořádné práce, ho nedostane. Na záložce Faktura to lze u každé faktury ručně přepnout.</p>
+      <p class="hint">Účetní rok LineArtu končí 30. září. První faktura s datem od 1. října připomene, že je potřeba potvrdit výši HUBu pro nový účetní rok. Zakázky v nabídce dodává LineArt s aktualizací programu.</p>
     </section>
 
     <!-- Aktualizace -->
@@ -1110,6 +1122,7 @@ function refresh(){
   $('vatRateField').style.display = isVatPayer() ? '' : 'none';
   $('invHubField').style.display = hubEnabled() ? '' : 'none';
   $('invHub').checked = !!state.hub;
+  renderHubRok();
   $('railTotalLabel').textContent = isVatPayer() ? 'Celkem s DPH' : 'Celkem';
   renderItems();
   renderInvoice();
@@ -1288,6 +1301,32 @@ function flash(msg, isErr){
    Na faktuře je přepínač „Pronájem HUB na této faktuře“, kterým lze pravidlo ručně přebít
    (state.hub = ano/ne, state.hubManual = přebito ručně). Řádek je běžná položka s příznakem hub:true. */
 const HUB_NAZEV_VYCHOZI = 'Pronájem HUB';
+/* Zakázky, na které se HUB zapisuje. Seznam mění LineArt a dodává ho s aktualizací programu (nový účetní rok). */
+const HUB_ZAKAZKY = [
+  { druh:'ACC',  cislo:'04082', nazev:'Interní zakázka ACC fy 2026' },
+  { druh:'KREA', cislo:'04083', nazev:'Interní zakázka KREA fy 2026' },
+  { druh:'DTP',  cislo:'04084', nazev:'Interní zakázka DTP fy2026' }
+];
+/* v nastavení se ukládá druh (ACC / KREA / DTP), ne číslo: po aktualizaci s novými zakázkami zůstane volba platná */
+/* účetní rok LineArtu: říjen až září; označuje se rokem, ve kterém končí (10/2026 až 9/2027 = 2027) */
+function ucetniRok(iso){ const m = String(iso || '').match(/^(\d{4})-(\d{2})/); if(!m) return null; return +m[1] + (+m[2] >= 10 ? 1 : 0); }
+function hubZakazka(){ return HUB_ZAKAZKY.find(z => z.druh === nastaveni.hubZakazka) || null; }
+function hubPopisek(){ const z = hubZakazka(); return hubNazev() + (z ? ' – ' + z.cislo + ' ' + z.nazev : ''); }
+/* faktura spadá do novějšího účetního roku, než pro který byla výše HUBu naposledy potvrzena */
+function hubNovyRok(){
+  if(!state.hub || !hubEnabled()) return false;
+  const r = ucetniRok(state.invoice.issue);
+  return !!r && !!nastaveni.hubRok && r > nastaveni.hubRok;
+}
+function hubPotvrdRok(){ const r = Math.max(ucetniRok(todayISO()), ucetniRok(state.invoice.issue) || 0); if(r && (!nastaveni.hubRok || r > nastaveni.hubRok)) nastaveni.hubRok = r; }
+function renderHubRok(){
+  const box = $('invHubRok'), novy = hubNovyRok();
+  box.hidden = !novy;
+  if(!novy) return;
+  const r = ucetniRok(state.invoice.issue);
+  $('invHubRokText').innerHTML = `<b>Začal nový účetní rok LineArtu</b> (od 1. 10. ${r - 1}). Zkontrolujte výši HUBu: zatím je nastaveno <b>${esc(fmtMoney(hubCastkaNum()))}</b> měsíčně. Zakázka: <b>${esc(hubZakazka() ? hubZakazka().cislo + ' ' + hubZakazka().nazev : 'nevybraná')}</b>.`;
+  if(document.activeElement !== $('invHubRokCastka')) $('invHubRokCastka').value = hubCastkaNum() || '';
+}
 function hubCastkaNum(){ const n = parseFloat(nastaveni.hubCastka); return isFinite(n) && n > 0 ? n : 0; }
 function hubNazev(){ return (nastaveni.hubNazev || '').trim() || HUB_NAZEV_VYCHOZI; }
 function hubEnabled(){ return !!nastaveni.hubPronajem && hubCastkaNum() > 0; }
@@ -1308,7 +1347,7 @@ function hubRule(){
 function applyHub(){
   const existing = state.items.find(it => it.hub);
   state.items = state.items.filter(it => !it.hub);
-  if(state.hub && hubEnabled()) state.items.push(existing || { qty:1, unit:'měs.', label: hubNazev(), price: hubCastkaNum(), hub:true });
+  if(state.hub && hubEnabled()) state.items.push(existing || { qty:1, unit:'měs.', label: hubPopisek(), price: hubCastkaNum(), hub:true });
 }
 function decideHub(){
   if(!state.hubManual) state.hub = hubRule();
@@ -1322,28 +1361,45 @@ function fillHub(){
   $('hubOn').checked = !!nastaveni.hubPronajem;
   $('hubCastka').value = hubCastkaNum() || '';
   $('hubNazev').value = nastaveni.hubNazev || '';
+  const zs = $('hubZakazka');
+  zs.innerHTML = '<option value="">— vyberte zakázku —</option>' + HUB_ZAKAZKY.map(z => `<option value="${esc(z.druh)}">${esc(z.cislo + ' ' + z.nazev)}</option>`).join('');
+  zs.value = hubZakazka() ? nastaveni.hubZakazka : '';
   const sel = $('hubOdberatel');
   sel.innerHTML = '<option value="">— vyberte odběratele —</option>' + customers.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
   if(!nastaveni.hubOdberatel){ const la = customers.find(c => /line\s*art/i.test(c.name)); if(la) nastaveni.hubOdberatel = la.name; }
   sel.value = nastaveni.hubOdberatel || '';
-  for(const id of ['hubCastkaField','hubOdberatelField','hubNazevField']) $(id).style.display = nastaveni.hubPronajem ? '' : 'none';
+  for(const id of ['hubZakazkaField','hubCastkaField','hubOdberatelField','hubNazevField']) $(id).style.display = nastaveni.hubPronajem ? '' : 'none';
 }
 $('hubOn').addEventListener('change', e => {
   nastaveni.hubPronajem = e.target.checked;
-  for(const id of ['hubCastkaField','hubOdberatelField','hubNazevField']) $(id).style.display = e.target.checked ? '' : 'none';
+  for(const id of ['hubZakazkaField','hubCastkaField','hubOdberatelField','hubNazevField']) $(id).style.display = e.target.checked ? '' : 'none';
   if(e.target.checked) $('hubCastka').focus();
   hubSettingsChanged();
 });
 $('hubCastka').addEventListener('input', e => {
   const n = parseFloat(String(e.target.value).replace(',', '.'));
   nastaveni.hubCastka = isFinite(n) && n > 0 ? n : 0;
+  hubPotvrdRok();
   const it = state.items.find(x => x.hub); if(it) it.price = hubCastkaNum();
   hubSettingsChanged();
+});
+$('hubZakazka').addEventListener('change', e => {
+  nastaveni.hubZakazka = e.target.value;
+  const it = state.items.find(x => x.hub); if(it) it.label = hubPopisek();
+  hubSettingsChanged();
+});
+$('invHubRokOk').addEventListener('click', () => {
+  const n = parseFloat(String($('invHubRokCastka').value).replace(',', '.'));
+  if(!(isFinite(n) && n > 0)){ $('invHubRokCastka').focus(); flash('Zadejte výši HUBu.', true); return; }
+  nastaveni.hubCastka = n; nastaveni.hubRok = ucetniRok(state.invoice.issue);
+  const it = state.items.find(x => x.hub); if(it){ it.price = n; it.label = hubPopisek(); }
+  fillHub(); hubSettingsChanged();
+  flash('Výše HUBu ' + fmtMoney(n) + ' potvrzena pro účetní rok ' + (nastaveni.hubRok - 1) + '/' + nastaveni.hubRok + '.');
 });
 $('hubOdberatel').addEventListener('change', e => { nastaveni.hubOdberatel = e.target.value; hubSettingsChanged(); });
 $('hubNazev').addEventListener('input', e => {
   nastaveni.hubNazev = e.target.value;
-  const it = state.items.find(x => x.hub); if(it) it.label = hubNazev();
+  const it = state.items.find(x => x.hub); if(it) it.label = hubPopisek();
   hubSettingsChanged();
 });
 $('invHub').addEventListener('change', e => {
@@ -1490,6 +1546,7 @@ async function boot(){
   verze = b.verze || '';
   showVerze(); updNote('Verze ' + (verze || '?') + '.');
   renderCustomers(); fillHub();
+  if(nastaveni.hubPronajem && !nastaveni.hubRok){ nastaveni.hubRok = ucetniRok(todayISO()); persist(); }   /* stávající instalace: dosavadní výše platí pro běžný účetní rok */
   if(state.hub === undefined) decideHub(); else applyHub();   /* rozpracovaná faktura z dřívější verze: rozhodnout poprvé */
   fillForm(); renderFaktury(); refresh();
   scaleSheet(); setTimeout(scaleSheet, 50);
