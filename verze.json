@@ -1,7 +1,7 @@
 {
-  "verze": "1.7.1",
-  "datum": "2026-10-20",
-  "popis": "Aktualizace se nově stahují z firemního repozitáře LineartAI/Fakturator, původní adresa zůstává jako záložní.",
+  "verze": "1.8.0",
+  "datum": "2026-11-24",
+  "popis": "Pronájem HUB: výběr zakázky (ACC, KREA, DTP) a připomínka výše HUBu na začátku účetního roku LineArtu (1. října).",
   "soubory": [
     "server.js",
     "web/index.html",

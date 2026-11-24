@@ -265,7 +265,9 @@ async function handleApi(req, res, url){
       readJson(DRAFT, null),
       listInvoices()
     ]);
-    return sendJson(res, 200, { nastaveni, odberatele, draft, faktury, verze: readVerze().verze });
+    /* misto.aplikace = nainstalovana aplikace (Mac/Windows), data jsou mimo slozku programu */
+    const misto = { aplikace: !!process.env.OF_DATA_ROOT, slozka: DATA_ROOT };
+    return sendJson(res, 200, { nastaveni, odberatele, draft, faktury, verze: readVerze().verze, misto });
   }
 
   // GET /api/verze — verze běžícího programu

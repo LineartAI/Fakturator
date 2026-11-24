@@ -152,6 +152,7 @@ jobs:
           path: Fakturator-mac.dmg
 
       - name: Zkusebni vydani mac-test
+        if: ${{ inputs.nahrat_do == '' }}
         run: |
           set -euo pipefail
           POZN="Zkušební sestavení aplikace pro macOS (verze programu $VERZE, commit ${GITHUB_SHA:0:7}). Není určeno uživatelům."

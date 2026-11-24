@@ -113,6 +113,7 @@ jobs:
             vystup/uvodni-okno.png
 
       - name: Zkusebni vydani win-test
+        if: ${{ inputs.nahrat_do == '' }}
         run: |
           $pozn = "Zkušební sestavení instalátoru pro Windows (verze programu $env:VERZE, commit $($env:GITHUB_SHA.Substring(0,7))). Není určeno uživatelům."
           gh release view win-test --repo $env:GITHUB_REPOSITORY *> $null

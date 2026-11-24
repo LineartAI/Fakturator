@@ -7,19 +7,28 @@ OpenFaktura.command a adresa aktualizací na GitHubu si původní název
 OpenFaktura ponechávají — aktualizace je nepřepisuje a zástupci na ploše
 dál fungují. Nic přejmenovávat nemusíte.
 
-Celý program je v této jedné složce. Data i PDF se ukládají na disk
-(ve složkách data/ a pdf-faktury/), nezávisle na prohlížeči.
+Program se dá mít dvěma způsoby:
+  - nainstalovaná aplikace (instalátor pro Windows, aplikace pro Mac
+    z portálu): data i PDF jsou ve složce Dokumenty/Fakturator,
+  - složka ze zipu (starší způsob): celý program i data jsou v této
+    jedné složce (data/ a pdf-faktury/).
+V obou případech se data ukládají na disk, nezávisle na prohlížeči.
 
 
 JAK SPUSTIT
 -----------
 
-Windows:
+Nainstalovaná aplikace:
+  Windows: ikona Fakturator na ploše. Program běží u hodin (šipka vpravo
+  dole), odtud ho jde i ukončit.
+  Mac: Fakturator v Aplikacích nebo v Docku, ukončení přes Dock.
+
+Složka ze zipu, Windows:
   Dvojklik na  OpenFaktura.bat
   Otevře se okno a v prohlížeči naběhne aplikace (http://localhost:3000).
   Okno nechte otevřené — zavřením okna aplikaci ukončíte.
 
-macOS:
+Složka ze zipu, macOS:
   Dvojklik na  OpenFaktura.command
   Když se poprvé objeví bezpečnostní hláška „nelze otevřít, neznámý
   vývojář", klikněte na soubor pravým tlačítkem → Otevřít → Otevřít.
@@ -72,13 +81,21 @@ se otevírají bez zaokrouhlení, tak jak byly vystaveny.
 PRONÁJEM HUB
 ------------
 V Nastavení → Pronájem zapněte „Platím si pronájem – HUB“ a zadejte měsíční
-částku, odběratele (Line Art) a text řádku. Pronájem se PŘIČÍTÁ: při založení
-nové faktury tomuto odběrateli program přidá řádek „Pronájem HUB“ (1 měs.),
+částku, zakázku pro zapsání HUBu (ACC, KREA nebo DTP), odběratele (Line Art)
+a text řádku (ten se použije, jen když zakázka není vybraná). Na faktuře je na řádku jen číslo a název zakázky, např. „04083
+Interní zakázka KREA fy 2026“. Pronájem se PŘIČÍTÁ: při založení
+nové faktury tomuto odběrateli program přidá řádek HUBu (1 měs.),
 ale jen když v témže měsíci (podle data vystavení) ještě žádná faktura
 tomuto odběrateli není. Druhá faktura v měsíci (mimořádné práce) řádek
 nedostane. Na záložce Faktura je přepínač „Pronájem HUB na této faktuře“,
 kterým lze pravidlo u konkrétní faktury ručně přebít; smazání řádku křížkem
 má stejný účinek. Nahrání tabulky řádek HUB zachová.
+
+Účetní rok LineArtu končí 30. září. První faktura s datem od 1. října
+ukáže upozornění „Začal nový účetní rok LineArtu“ s polem pro výši HUBu;
+částku zkontrolujte nebo opravte a klikněte na „Potvrdit pro nový účetní
+rok“. Zakázky v nabídce dodává LineArt s aktualizací programu; vybraný
+druh (ACC, KREA, DTP) zůstane i po změně čísel zakázek.
 
 
 VERZE A AKTUALIZACE
@@ -117,8 +134,10 @@ aby starší data po aktualizaci fungovala.
 
 ZÁLOHA
 ------
-Zálohu uděláte prostým zkopírováním celé složky programu (OpenFaktura)
-(např. na flashku nebo do cloudu). Je v ní úplně všechno.
+Nainstalovaná aplikace: zkopírujte složku Dokumenty/Fakturator (např. na
+flashku nebo do cloudu). Jsou v ní faktury, odběratelé, nastavení i PDF.
+Složka ze zipu: zkopírujte celou složku programu (OpenFaktura), je v ní
+úplně všechno.
 
 
 SDÍLENÍ S KOLEGOU

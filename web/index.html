@@ -382,7 +382,7 @@ input,select,textarea{font:inherit;color:var(--ink)}
         <div class="barlbls"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span></div>
       </div>
       <div class="arch" id="archBox" style="margin-top:12px"></div>
-      <p class="hint">Kliknutím na řádek fakturu otevřete. Na štítku přepnete Uhrazeno / Čeká. Všechna data leží v této složce (<b>data/</b>) — záloha = zkopírovat celou složku programu.</p>
+      <p class="hint">Kliknutím na řádek fakturu otevřete. Na štítku přepnete Uhrazeno / Čeká. <span id="mistoZaloha">Všechna data leží v této složce (<b>data/</b>) — záloha = zkopírovat celou složku programu.</span></p>
     </section>
 
     </div>
@@ -434,7 +434,7 @@ input,select,textarea{font:inherit;color:var(--ink)}
     <!-- Aktualizace -->
     <section class="sec" id="secUpdate">
       <h2>Aktualizace</h2>
-      <p class="hint" style="margin-top:0"><b>Fakturator</b> je dřívější OpenFaktura — složka programu a spouštěče <b>OpenFaktura.bat</b> / <b>OpenFaktura.command</b> si původní název ponechávají, aby fungovaly aktualizace i zástupci.</p>
+      <p class="hint" style="margin-top:0" id="mistoSpoustece"><b>Fakturator</b> je dřívější OpenFaktura — složka programu a spouštěče <b>OpenFaktura.bat</b> / <b>OpenFaktura.command</b> si původní název ponechávají, aby fungovaly aktualizace i zástupci.</p>
       <p class="hint" id="updNote" style="margin-top:0">Verze programu se načítá…</p>
       <div class="btnbar">
         <button class="btn small" id="btnUpdCheck">Zkontrolovat aktualizace</button>
@@ -1228,7 +1228,7 @@ $('btnNew').addEventListener('click', () => {
   state.items = [];
   state.hubManual = false; decideHub();
   fillForm(); refresh();
-  flash(`Založena faktura ${state.invoice.number}.` + (state.hub ? ' Přidán řádek „' + hubNazev() + '“.' : ''));
+  flash(`Založena faktura ${state.invoice.number}.` + (state.hub ? ' Přidán řádek „' + hubPopisek() + '“.' : ''));
 });
 
 $('btnArchive').addEventListener('click', async () => {
@@ -1283,7 +1283,16 @@ function flash(msg, isErr){
   el.textContent = msg;
   el.style.color = isErr ? 'var(--warn)' : 'var(--ok)';
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => { el.textContent = 'Data zůstávají jen u vás, ve složce programu na tomto počítači.'; el.style.color = ''; }, 4000);
+  flashTimer = setTimeout(() => { el.textContent = mistoText(); el.style.color = ''; }, 4000);
+}
+/* kde leží data: zip verze = ve složce programu, nainstalovaná aplikace = Dokumenty/Fakturator (server posílá misto) */
+let misto = { aplikace:false, slozka:'' };
+function mistoText(){ return misto.aplikace ? 'Data zůstávají jen u vás, ve složce Fakturator v Dokumentech na tomto počítači.' : 'Data zůstávají jen u vás, ve složce programu na tomto počítači.'; }
+function applyMisto(){
+  $('saveNote').textContent = mistoText();
+  if(!misto.aplikace) return;
+  $('mistoZaloha').innerHTML = 'Všechna data leží ve složce <b>' + esc(misto.slozka) + '</b> (faktury, odběratelé, nastavení a PDF) — záloha = zkopírovat tuto složku.';
+  $('mistoSpoustece').hidden = true;
 }
 
 /* ================= Přepínač slučování ================= */
@@ -1311,7 +1320,8 @@ const HUB_ZAKAZKY = [
 /* účetní rok LineArtu: říjen až září; označuje se rokem, ve kterém končí (10/2026 až 9/2027 = 2027) */
 function ucetniRok(iso){ const m = String(iso || '').match(/^(\d{4})-(\d{2})/); if(!m) return null; return +m[1] + (+m[2] >= 10 ? 1 : 0); }
 function hubZakazka(){ return HUB_ZAKAZKY.find(z => z.druh === nastaveni.hubZakazka) || null; }
-function hubPopisek(){ const z = hubZakazka(); return hubNazev() + (z ? ' – ' + z.cislo + ' ' + z.nazev : ''); }
+/* na faktuře je u vybrané zakázky jen její číslo a název; bez zakázky text řádku z nastavení */
+function hubPopisek(){ const z = hubZakazka(); return z ? z.cislo + ' ' + z.nazev : hubNazev(); }
 /* faktura spadá do novějšího účetního roku, než pro který byla výše HUBu naposledy potvrzena */
 function hubNovyRok(){
   if(!state.hub || !hubEnabled()) return false;
@@ -1405,7 +1415,7 @@ $('hubNazev').addEventListener('input', e => {
 $('invHub').addEventListener('change', e => {
   state.hub = e.target.checked; state.hubManual = true;
   applyHub(); refresh();
-  flash(state.hub ? 'Řádek „' + hubNazev() + '“ přidán na fakturu.' : 'Řádek „' + hubNazev() + '“ z faktury odebrán.');
+  flash(state.hub ? 'Řádek „' + hubPopisek() + '“ přidán na fakturu.' : 'Řádek „' + hubPopisek() + '“ z faktury odebrán.');
 });
 
 /* ================= Záložky panelu ================= */
@@ -1489,7 +1499,7 @@ async function waitForRestart(newVer){
     try{ const v = await api.get('/api/verze'); if(v.verze === newVer){ location.reload(); return; } }
     catch(e){}
   }
-  updNote('Aktualizace na verzi ' + newVer + ' je nainstalovaná, ale server se sám nespustil. Zavřete okno serveru a spusťte znovu OpenFaktura.bat / OpenFaktura.command.', true);
+  updNote('Aktualizace na verzi ' + newVer + ' je nainstalovaná, ale server se sám nespustil. ' + (misto.aplikace ? 'Ukončete Fakturator (ikona u hodin nebo v Docku) a spusťte ho znovu.' : 'Zavřete okno serveru a spusťte znovu OpenFaktura.bat / OpenFaktura.command.'), true);
 }
 async function applyUpdate(){
   if(!dostupnaAktualizace) return;
@@ -1530,10 +1540,11 @@ async function boot(){
   catch(e){
     document.body.innerHTML = '<div style="max-width:560px;margin:14vh auto;padding:28px;font-family:sans-serif;line-height:1.6">'
       + '<h1 style="font-size:1.3rem;margin-bottom:10px">Fakturator se nespojil se serverem</h1>'
-      + '<p style="color:#5B6169">Zdá se, že server neběží. Spusťte aplikaci přes <b>OpenFaktura.bat</b> (Windows) nebo <b>OpenFaktura.command</b> (Mac) a otevřete <b>http://localhost:3000</b>.</p></div>';
+      + '<p style="color:#5B6169">Zdá se, že server neběží. Spusťte Fakturator ikonou na ploše (Windows) nebo v Aplikacích (Mac). Ve starší instalaci ze zipu přes <b>OpenFaktura.bat</b> / <b>OpenFaktura.command</b>. Pak otevřete <b>http://localhost:3000</b>.</p></div>';
     return;
   }
   nastaveni = b.nastaveni || nastaveni;
+  if(b.misto){ misto = b.misto; applyMisto(); }
   if(!SLUCOVANI[nastaveni.slucovani]) nastaveni.slucovani = SLUCOVANI_VYCHOZI;
   $('importMode').value = nastaveni.slucovani;
   customers = b.odberatele || [];
